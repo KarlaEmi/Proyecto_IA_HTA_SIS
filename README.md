@@ -127,7 +127,6 @@ El diccionario de variables está en `data/raw/Metadatos - Prestaciones de salud
 proyecto/
 ├── README.md                    ← este archivo
 ├── ENTREGABLE_PARCIAL.md        ← informe del avance parcial (cohorte, variables, baseline)
-├── requirements.txt             ← dependencias de Python
 ├── .gitattributes               ← reglas de Git LFS
 ├── data/
 │   ├── raw/                     ← datos originales del SIS (comprimidos, con Git LFS)
@@ -195,6 +194,8 @@ La versión más reciente del preprocesamiento agrega variables, como los antece
 | `jupyter` | Ejecutar los cuadernos |
 | `imbalanced-learn` *(opcional)* | Solo para el experimento comparativo con SMOTE/SMOTENC |
 
+Todas se instalan con un solo comando de `pip` (paso 3 de la instalación); `imbalanced-learn` solo hace falta para el experimento con SMOTE: `pip install imbalanced-learn`.
+
 ### Instalación
 
 ```bash
@@ -210,7 +211,7 @@ python -m venv .venv
 # Linux/macOS:  source .venv/bin/activate
 
 # 3. Instalar las dependencias
-pip install -r requirements.txt
+pip install pandas numpy matplotlib seaborn scikit-learn jupyter
 
 # 4. Descomprimir los datos crudos
 #    Los .zip quedan en data/raw/ y contienen los CSV "1. HTA_FUAS.csv", etc.
