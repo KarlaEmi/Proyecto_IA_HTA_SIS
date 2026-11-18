@@ -1,5 +1,291 @@
-# README
+# Predicción de complicaciones en pacientes hipertensos asegurados en el SIS (Perú)
 
-La hipertensión representa uno de los mayores peligros para la salud pública global. Entre 1990 y 2019, la cantidad de personas diagnosticadas o medicadas por esta condición (definida por niveles iguales o superiores a 140 mmHg de presión sistólica o 90 mmHg de diastólica) se duplicó, pasando de 650 millones a 1300 millones (OMS, 2024). Su impacto es crítico, ya que incrementa directamente el riesgo de sufrir accidentes cerebrovasculares, infartos, insuficiencia cardíaca y lesiones renales.
+Proyecto del curso **Inteligencia Artificial Aplicada (1INF62)**, PUCP, semestre 2026-2.
+Equipo: Karla García Rojas, Erich León Flórez y Rasec Gonzales Leyva.
 
-Un análisis comparativo sobre 87 factores de riesgo determinó que la presión sistólica elevada (a partir de 110–115 mmHg) es el principal detonante de mortalidad prematura en el planeta. Este padecimiento provoca un estimado de 10.8 millones de fallecimientos evitables al año y genera una carga de 235 millones de años de vida ajustados por discapacidad (AVAD). Su impacto letal supera al de otros factores de alto riesgo conocidos, como el consumo de tabaco o la hiperglucemia.
+> **Pregunta:** a partir de las atenciones de 2022–2023 de un paciente hipertenso del Seguro Integral de Salud (SIS), ¿se puede predecir si tendrá en **2024** una complicación grave (ACV/AIT, infarto, insuficiencia cardíaca, enfermedad renal o fallecimiento)?
+
+---
+
+## Índice
+
+1. [Problemática](#1-problemática)
+2. [Objetivo y definición del problema](#2-objetivo-y-definición-del-problema)
+3. [Datos](#3-datos)
+4. [Estructura del repositorio](#4-estructura-del-repositorio)
+5. [Dependencias e instalación](#5-dependencias-e-instalación)
+6. [Cómo reproducir el flujo](#6-cómo-reproducir-el-flujo)
+7. [Resultados del baseline](#7-resultados-del-baseline)
+8. [Limitaciones](#8-limitaciones)
+9. [Referencias](#9-referencias)
+
+---
+
+## 1. Problemática
+
+### 1.1 Una enfermedad frecuente, silenciosa y mal controlada
+
+La hipertensión arterial (HTA) se define como una presión arterial de **140/90 mmHg o más**. Para diagnosticarla, la sistólica debe ser ≥ 140 mmHg o la diastólica ≥ 90 mmHg en dos días distintos [1]. Casi nunca da síntomas, por eso la única forma de detectarla es medir la presión.
+
+Según la Organización Mundial de la Salud (OMS) [1, 2]:
+
+- En 2024 tenían hipertensión unos **1,400 millones de adultos de 30 a 79 años**. Es el **33%** de las personas de esa edad.
+- Dos tercios de ellos viven en países de ingresos bajos y medios, como el Perú.
+- El **44%** no sabe que tiene hipertensión. Solo el **23%** la tiene controlada.
+
+El número de personas con hipertensión **se duplicó entre 1990 y 2019**: pasó de unos 650 millones a unos 1,280 millones de adultos de 30 a 79 años. Gran parte de este aumento se debe al crecimiento y al envejecimiento de la población [3].
+
+### 1.2 Por qué importan las complicaciones
+
+Si la hipertensión no se controla, daña varios órganos [1]:
+
+| Órgano | Complicación | Códigos CIE-10 usados en este proyecto |
+|---|---|---|
+| Cerebro | Accidente cerebrovascular (ACV) y accidente isquémico transitorio (AIT) | I60–I64, G45 |
+| Corazón | Infarto agudo de miocardio (IAM) | I21–I23 |
+| Corazón | Insuficiencia cardíaca (IC) | I50, I11.0, I13.0, I13.2 |
+| Riñón | Enfermedad renal, que puede llegar a insuficiencia renal | N17–N19, I12, I13.1, I13.2 |
+| — | Fallecimiento | `DESTINO_ASEGURADO = 'Fallecido'` |
+
+El estudio Global Burden of Disease (GBD 2019) comparó **87 factores de riesgo** en 204 países. La **presión sistólica elevada** fue el principal factor de riesgo de muerte en el mundo. Se le atribuyen **10.8 millones de muertes** y **235 millones de años de vida ajustados por discapacidad (AVAD)** en 2019, más que al tabaco o a la glucosa elevada [4].
+
+Las complicaciones también se pueden **prevenir**. Un metaanálisis de 123 ensayos con 613,815 participantes encontró que bajar la sistólica en 10 mmHg reduce [5]:
+
+- 20% los eventos cardiovasculares mayores,
+- 27% los ACV,
+- 28% la insuficiencia cardíaca,
+- 13% la mortalidad total.
+
+Por eso, **identificar a tiempo a los pacientes con más riesgo** permite priorizar su seguimiento y su tratamiento.
+
+### 1.3 El contexto peruano
+
+- Con datos de la ENDES (2014–2022), la prevalencia de hipertensión en adultos peruanos es del **23%** [6].
+- El subdiagnóstico es alto. Un estudio poblacional peruano estimó que el **69.5%** de los hipertensos no tenía diagnóstico [7].
+- En la cohorte PERU MIGRANT, los hipertensos tuvieron **5.1 veces** más riesgo de morir en 10 años que las personas con presión normal [8].
+
+El **SIS** asegura principalmente a la población sin otro seguro de salud. Por eso atiende a una población con menos recursos, donde el control de la presión suele ser más difícil.
+
+### 1.4 Por qué usar aprendizaje automático con datos administrativos
+
+En el SIS no hay datos de laboratorio ni monitoreo continuo de la presión. Sí hay **registros administrativos** de cada atención: diagnósticos CIE-10, medicamentos, procedimientos, insumos y algunas mediciones de presión.
+
+La literatura muestra que esto puede ser suficiente para predecir el riesgo:
+
+- Feng et al. usaron datos administrativos de 259,873 hipertensos de Alberta (Canadá). Sus modelos de *machine learning* predijeron hospitalizaciones por IC, IAM y ACV con un índice de concordancia de hasta **0.81** [9].
+- Alimbayev et al. predijeron la mortalidad a un año de pacientes con diabetes en Kazajistán, también con datos administrativos. Los modelos de *gradient boosting* alcanzaron un AUC de **0.78–0.80**. La hipertensión fue una de las variables más importantes [10].
+
+Este proyecto aplica la misma idea a los datos abiertos del SIS.
+
+---
+
+## 2. Objetivo y definición del problema
+
+**Objetivo:** construir un modelo de clasificación binaria que estime, para cada paciente hipertenso, la probabilidad de una complicación grave en 2024.
+
+```
+|-------- 2022 y 2023 --------|---- 2024 ----|
+  Variables (X): historial       Objetivo (y): ¿tuvo complicación?
+```
+
+- **Unidad de análisis:** el paciente (una fila por paciente). Así un mismo paciente no puede quedar a la vez en train y en test.
+- **Cohorte:** pacientes con HTA (I10–I15) en 2022–2023 que:
+  - no tuvieron una complicación previa,
+  - no fallecieron antes de 2024,
+  - tienen al menos una atención en 2024.
+- **Objetivo `y`:** 1 si en 2024 aparece alguno de los eventos de la tabla 1.2. Solo se usan diagnósticos `DEFINITIVO` o `REPETIDO`.
+- **Desbalance:** alrededor del 5–6% de los pacientes tiene `y = 1`. Por eso:
+  - se usa `class_weight='balanced'`;
+  - se evalúa con ROC-AUC, PR-AUC, recall y precision, y no con accuracy;
+  - no se usa SMOTE como estrategia principal, porque no mejora el AUC y descalibra las probabilidades [11].
+
+---
+
+## 3. Datos
+
+**Fuente:** *Prestaciones de salud asociadas a los asegurados con Hipertensión Arterial*, publicado por el SIS en la Plataforma Nacional de Datos Abiertos del Perú. Los datos están anonimizados.
+
+Son 5 tablas, con unos **170 millones de filas** y **1.03 millones de pacientes**. Cubren atenciones de 2022 a 2024. Las tablas se unen por `ID_REGISTRO_REL`, el identificador de la atención.
+
+| Archivo | Una fila es… | Filas aprox. |
+|---|---|---|
+| `1. HTA_FUAS` | una atención (paciente, fecha, edad, ubicación, presión arterial, hospitalización, destino) | 24.3 M |
+| `2. HTA_Diagnosticos` | un diagnóstico CIE-10 de una atención | 38.1 M |
+| `3. HTA_Medicamentos` | una entrega de medicamento | 39.4 M |
+| `4. HTA_Procedimientos` | un procedimiento | 53.0 M |
+| `5. HTA_Insumos` | una entrega de insumo | 15.8 M |
+
+El diccionario de variables está en `data/raw/Metadatos - Prestaciones de salud asociadas a los asegurados con Hipertensión Arterial.docx`.
+
+**Tabla auxiliar:** la altitud de cada distrito sale de `ubigeo_inei_2025.csv`, del repositorio [ubigeos_peru](https://github.com/MichaelSuarez0/ubigeos_peru). Se cruza por **código** de ubigeo, no por nombre, porque hay distritos con el mismo nombre en distintas regiones.
+
+---
+
+## 4. Estructura del repositorio
+
+```
+proyecto/
+├── README.md                    ← este archivo
+├── ENTREGABLE_PARCIAL.md        ← informe del avance parcial (cohorte, variables, baseline)
+├── .gitattributes               ← reglas de Git LFS
+├── data/
+│   ├── raw/                     ← datos originales del SIS (comprimidos, con Git LFS)
+│   │   ├── 1. HTA_FUAS.zip
+│   │   ├── 2. HTA_Diagnosticos.zip
+│   │   ├── 3. HTA_Medicamentos.zip
+│   │   ├── 4. HTA_Procedimientos.zip
+│   │   ├── 5. HTA_Insumos.zip
+│   │   └── Metadatos - ... .docx  ← diccionario de datos
+│   └── processed/
+│       └── dataset_consolidado.csv  ← una fila por paciente (salida del preprocesamiento)
+├── notebooks/
+│   ├── 01_eda.ipynb             ← Parte 1: análisis exploratorio de las 5 tablas
+│   └── 02_modelos.ipynb         ← Partes 3 y 4: modelos y comparación
+├── src/
+│   └── preprocessing.ipynb      ← Parte 2: limpieza, cohorte, objetivo y variables
+└── papers/
+    ├── paper_integrante1.pdf    ← papers base revisados por el equipo
+    ├── paper_integrante2.pdf
+    ├── paper_integrante3.pdf
+    └── resumen_papers.md        ← resumen y aporte de cada paper al proyecto
+```
+
+### Qué hace cada cuaderno
+
+| Orden | Cuaderno | Entrada | Salida | Contenido |
+|---|---|---|---|---|
+| 1 | `notebooks/01_eda.ipynb` | 5 CSV crudos | gráficos y tablas | Tamaño y calidad de cada tabla, valores faltantes e imposibles, duplicados, distribución de diagnósticos, presión arterial y gasto. Verifica la cohorte y los códigos del objetivo |
+| 2 | `src/preprocessing.ipynb` | 5 CSV crudos + `ubigeo_inei_2025.csv` | `dataset_consolidado.csv` | Lectura por bloques, limpieza con rangos fisiológicos, selección de la cohorte, construcción de `y` y agregación de variables por paciente (demografía, uso de servicios, presión arterial, antecedentes, consumos) |
+| 3 | `notebooks/02_modelos.ipynb` | `dataset_consolidado.csv` | métricas y gráficos | División train/test estratificada, imputación y escalado ajustados solo con train, KNN, árbol de decisión, regresión logística, validación cruzada y comparación final |
+
+### Variables del dataset consolidado
+
+| Grupo | Variables |
+|---|---|
+| Demográficas | `edad`, `masculino` |
+| Ubicación | `es_lima_frecuente`, `altitud_msnm` |
+| Uso de servicios | `n_atenciones`, `n_emergencias`, `n_hospitalizaciones`, `dias_hosp` |
+| Presión arterial | `n_mediciones_pa`, `pas_media`, `pas_max`, `pad_media`, `pad_max`, `presion_pulso`, `presion_pulso_max`, `prop_pa_alta`, `sin_medicion_pa` |
+| Antecedentes | `diabetes`, `dislipidemia`, `obesidad`, `fib_auricular`, `cardiopatia`, `n_diagnosticos` |
+| Consumos | `n_medicamentos`, `gasto_medicamentos`, `n_procedimientos`, `gasto_procedimientos`, `n_insumos`, `gasto_insumos`, `polifarmacia` |
+| Objetivo | `y` |
+
+La versión más reciente del preprocesamiento agrega variables, como los antecedentes de cardiopatía hipertensiva. El CSV subido corresponde al entregable parcial; si cambias el preprocesamiento, vuelve a generarlo.
+
+---
+
+## 5. Dependencias e instalación
+
+### Requisitos
+
+- **Python 3.10 o superior** (los cuadernos funcionan con Python 3.13).
+- **Git LFS**, para descargar los `.zip` de `data/raw/`.
+- **Memoria:** el preprocesamiento lee ≈170 M filas. Lee por bloques y usa tipos `category`, pero conviene tener **16 GB de RAM o más**. Con menos memoria, usa una muestra con el parámetro `FRAC` (por ejemplo, `FRAC = 0.05`).
+- **Disco:** unos 10 GB libres para los CSV descomprimidos.
+
+### Librerías
+
+| Librería | Uso en el proyecto |
+|---|---|
+| `pandas` | Lectura por bloques, limpieza y agregación por paciente |
+| `numpy` | Cálculos numéricos y validación de rangos (en `float64`) |
+| `matplotlib`, `seaborn` | Gráficos del EDA, del preprocesamiento y de los modelos |
+| `scikit-learn` | `train_test_split`, `StratifiedKFold`, `Pipeline`, `SimpleImputer`, `StandardScaler`, KNN, árbol, regresión logística y métricas |
+| `jupyter` | Ejecutar los cuadernos |
+| `imbalanced-learn` *(opcional)* | Solo para el experimento comparativo con SMOTE/SMOTENC |
+
+Todas se instalan con un solo comando de `pip` (paso 3 de la instalación); `imbalanced-learn` solo hace falta para el experimento con SMOTE: `pip install imbalanced-learn`.
+
+### Instalación
+
+```bash
+# 1. Clonar el repositorio y descargar los archivos grandes
+git lfs install
+git clone https://github.com/KarlaEmi/proyecto.git
+cd proyecto
+git lfs pull
+
+# 2. Crear un entorno virtual
+python -m venv .venv
+# Windows:      .venv\Scripts\activate
+# Linux/macOS:  source .venv/bin/activate
+
+# 3. Instalar las dependencias
+pip install pandas numpy matplotlib seaborn scikit-learn jupyter
+
+# 4. Descomprimir los datos crudos
+#    Los .zip quedan en data/raw/ y contienen los CSV "1. HTA_FUAS.csv", etc.
+```
+
+Además, descarga `ubigeo_inei_2025.csv` desde [ubigeos_peru](https://github.com/MichaelSuarez0/ubigeos_peru) y colócalo en la misma carpeta que los CSV.
+
+---
+
+## 6. Cómo reproducir el flujo
+
+1. **EDA:** abre `notebooks/01_eda.ipynb`. En la variable `RUTA`, pon la carpeta de los CSV y ejecuta todas las celdas.
+2. **Preprocesamiento:** abre `src/preprocessing.ipynb` y revisa los parámetros de la primera celda:
+   - `RUTA`: carpeta de los CSV (`""` = la misma carpeta del cuaderno).
+   - `FRAC`: fracción de pacientes. `None` = todos.
+   - `FIN_OBS = 20231231` y `INI_RES = 20240101`: separan el periodo de las variables del periodo del objetivo.
+   - `CHUNK`: filas por bloque al leer.
+
+   El cuaderno genera `dataset_consolidado.csv`. Muévelo a `data/processed/`. Si se activa alguno de sus controles de calidad (por ejemplo, demasiadas presiones anuladas), la ejecución se detiene con un mensaje.
+3. **Modelos:** abre `notebooks/02_modelos.ipynb`. Revisa que la ruta de lectura apunte al CSV, por ejemplo `pd.read_csv('../data/processed/dataset_consolidado.csv', index_col='paciente')`. Ejecuta todas las celdas.
+
+La semilla es `SEED = 42` en todos los cuadernos.
+
+---
+
+## 7. Resultados del baseline
+
+Resultados del entregable parcial, sobre 84,663 pacientes de test:
+
+| Modelo | Recall | Precision | ROC-AUC test | ROC-AUC CV (5 folds) |
+|---|---|---|---|---|
+| KNN (k = 101) | 0.000 | 0.000 | 0.669 | 0.652 ± 0.011 |
+| Árbol de decisión (profundidad 7) | 0.634 | 0.087 | 0.683 | 0.650 ± 0.010 |
+| **Regresión logística** (`class_weight='balanced'`) | 0.628 | 0.092 | **0.695** | **0.693 ± 0.009** |
+
+La capacidad predictiva es moderada. Es lo esperable sin datos de laboratorio, como creatinina, colesterol o HbA1c. El detalle está en `ENTREGABLE_PARCIAL.md`.
+
+**Siguientes pasos:**
+- Random Forest y HistGradientBoosting.
+- PR-AUC, ajuste del umbral y calibración.
+- `log1p` en conteos y gastos, y regularización L1/elastic-net.
+- Validación temporal.
+
+---
+
+## 8. Limitaciones
+
+- **Sesgo de detección:** solo se observan las complicaciones de los pacientes que vuelven a atenderse en el SIS. Un evento atendido en otro sistema de salud no aparece.
+- **Ubicación:** `UBIGEO` y `DEPARTAMENTO` son los del establecimiento, no los del domicilio del paciente.
+- **Gasto y cápita:** en las atenciones pagadas por cápita, el gasto registrado es siempre 0. Por eso las variables `gasto_*` reflejan más la forma de financiamiento que el consumo real. Se prefieren los conteos `n_*`.
+- **Presión arterial:** falta en casi la mitad de las atenciones y se registra con preferencia por números redondos.
+- **Sin laboratorio:** no hay datos de laboratorio ni un catálogo para identificar los antihipertensivos.
+
+---
+
+## 9. Referencias
+
+**Organización Mundial de la Salud**
+
+1. World Health Organization. *Hypertension* (nota descriptiva). 25 de septiembre de 2025. https://www.who.int/news-room/fact-sheets/detail/hypertension
+2. World Health Organization. *Global report on hypertension 2025: high stakes – turning evidence into action*. Ginebra: OMS; 2025. https://www.who.int/publications/i/item/9789240115569
+
+**Artículos indexados en PubMed**
+
+3. NCD Risk Factor Collaboration (NCD-RisC). Worldwide trends in hypertension prevalence and progress in treatment and control from 1990 to 2019: a pooled analysis of 1201 population-representative studies with 104 million participants. *Lancet*. 2021;398(10304):957–980. doi:[10.1016/S0140-6736(21)01330-1](https://doi.org/10.1016/S0140-6736(21)01330-1). PMID: [34450083](https://pubmed.ncbi.nlm.nih.gov/34450083/)
+4. GBD 2019 Risk Factors Collaborators. Global burden of 87 risk factors in 204 countries and territories, 1990–2019: a systematic analysis for the Global Burden of Disease Study 2019. *Lancet*. 2020;396(10258):1223–1249. doi:[10.1016/S0140-6736(20)30752-2](https://doi.org/10.1016/S0140-6736(20)30752-2). PMID: [33069327](https://pubmed.ncbi.nlm.nih.gov/33069327/)
+5. Ettehad D, Emdin CA, Kiran A, et al. Blood pressure lowering for prevention of cardiovascular disease and death: a systematic review and meta-analysis. *Lancet*. 2016;387(10022):957–967. doi:[10.1016/S0140-6736(15)01225-8](https://doi.org/10.1016/S0140-6736(15)01225-8). PMID: [26724178](https://pubmed.ncbi.nlm.nih.gov/26724178/)
+6. Prevalence, trends, and factors associated with hypertensive crisis among Peruvian adults. *Cadernos de Saúde Pública*. 2024;40(2):e00155123. https://scielosp.org/article/csp/2024.v40n2/e00155123
+7. Factores asociados a hipertensión arterial no diagnosticada en el Perú. *Archivos de Cardiología de México*. 2025. https://pmc.ncbi.nlm.nih.gov/articles/PMC12148522
+8. Hidalgo-Benites A, Senosain-Leon V, Carrillo-Larco RM, et al. Blood pressure and 10-year all-cause mortality: Findings from the PERU MIGRANT Study. *F1000Research*. 2023;10:1134. doi:[10.12688/f1000research.73900.4](https://doi.org/10.12688/f1000research.73900.4). PMID: [38046986](https://pubmed.ncbi.nlm.nih.gov/38046986/)
+9. Feng Y, Leung AA, Lu X, Liang Z, Quan H, Walker RL. Personalized prediction of incident hospitalization for cardiovascular disease in patients with hypertension using machine learning. *BMC Medical Research Methodology*. 2022;22(1):325. doi:[10.1186/s12874-022-01814-3](https://doi.org/10.1186/s12874-022-01814-3). PMID: [36528631](https://pubmed.ncbi.nlm.nih.gov/36528631/)
+10. Alimbayev A, Zhakhina G, Gusmanov A, et al. Predicting 1-year mortality of patients with diabetes mellitus in Kazakhstan based on administrative health data using machine learning. *Scientific Reports*. 2023;13(1):8412. doi:[10.1038/s41598-023-35551-4](https://doi.org/10.1038/s41598-023-35551-4). PMID: [37225754](https://pubmed.ncbi.nlm.nih.gov/37225754/)
+11. van den Goorbergh R, van Smeden M, Timmerman D, Van Calster B. The harm of class imbalance corrections for risk prediction models: illustration and simulation using logistic regression. *Journal of the American Medical Informatics Association*. 2022;29(9):1525–1534. doi:[10.1093/jamia/ocac093](https://doi.org/10.1093/jamia/ocac093). PMID: [35686364](https://pubmed.ncbi.nlm.nih.gov/35686364/)
+
+**Datos**
+
+12. Seguro Integral de Salud (SIS). *Prestaciones de salud asociadas a los asegurados con Hipertensión Arterial*. Plataforma Nacional de Datos Abiertos del Perú.
