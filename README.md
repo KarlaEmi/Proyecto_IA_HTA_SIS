@@ -15,7 +15,7 @@ Equipo: Karla García Rojas, Erich León Flórez y Rasec Gonzales Leyva.
 4. [Estructura del repositorio](#4-estructura-del-repositorio)
 5. [Dependencias e instalación](#5-dependencias-e-instalación)
 6. [Cómo reproducir el flujo](#6-cómo-reproducir-el-flujo)
-7. [Resultados del baseline](#7-resultados-del-baseline)
+7. [Resultados](#7-resultados)
 8. [Limitaciones](#8-limitaciones)
 9. [Referencias](#9-referencias)
 
@@ -124,7 +124,7 @@ El diccionario de variables está en `data/raw/Metadatos - Prestaciones de salud
 ## 4. Estructura del repositorio
 
 ```
-proyecto/
+Proyecto_IA_HTA_SIS/
 ├── README.md                    ← este archivo
 ├── ENTREGABLE_PARCIAL.md        ← informe del avance parcial (cohorte, variables, baseline)
 ├── .gitattributes               ← reglas de Git LFS
@@ -140,7 +140,12 @@ proyecto/
 │       └── dataset_consolidado.csv  ← una fila por paciente (salida del preprocesamiento)
 ├── notebooks/
 │   ├── 01_eda.ipynb             ← Parte 1: análisis exploratorio de las 5 tablas
-│   └── 02_modelos.ipynb         ← Partes 3 y 4: modelos y comparación
+│   ├── 02_modelos.ipynb         ← Partes 3 y 4: KNN, árbol, regresión logística (baseline)
+│   ├── 03_random_forest.ipynb   ← Random Forest: hiperparámetros, calibración, importancia
+│   ├── 04_secuencias.ipynb      ← historia mensual por paciente (tensor 24 meses) para la GRU
+│   ├── 05_gru.ipynb             ← red recurrente (GRU) sobre la historia mensual
+│   ├── 06_robustez.ipynb        ← referencias clínicas, curva de decisión, objetivos alternativos, validación temporal
+│   └── 07_boosting_ensamble.ipynb ← gradient boosting y ensambles (RF + boosting + GRU)
 ├── src/
 │   └── preprocessing.ipynb      ← Parte 2: limpieza, cohorte, objetivo y variables
 └── papers/
@@ -157,6 +162,13 @@ proyecto/
 | 1 | `notebooks/01_eda.ipynb` | 5 CSV crudos | gráficos y tablas | Tamaño y calidad de cada tabla, valores faltantes e imposibles, duplicados, distribución de diagnósticos, presión arterial y gasto. Verifica la cohorte y los códigos del objetivo |
 | 2 | `src/preprocessing.ipynb` | 5 CSV crudos + `ubigeo_inei_2025.csv` | `dataset_consolidado.csv` | Lectura por bloques, limpieza con rangos fisiológicos, selección de la cohorte, construcción de `y` y agregación de variables por paciente (demografía, uso de servicios, presión arterial, antecedentes, consumos) |
 | 3 | `notebooks/02_modelos.ipynb` | `dataset_consolidado.csv` | métricas y gráficos | División train/test estratificada, imputación y escalado ajustados solo con train, KNN, árbol de decisión, regresión logística, validación cruzada y comparación final |
+| 4 | `notebooks/03_random_forest.ipynb` | `dataset_consolidado.csv` | `predicciones_test_rf_rl.csv`, `mejores_hiperparametros_rf.csv` | Random Forest con la misma partición: efecto de cada hiperparámetro, búsqueda aleatoria, umbral, bootstrap pareado contra la regresión logística, calibración, importancia por permutación y análisis gasto vs. cápita |
+| 5 | `notebooks/04_secuencias.ipynb` | 5 CSV crudos + `dataset_consolidado.csv` | `secuencias_X.npy`, `secuencias_estaticas.npy`, `secuencias_meta.csv` | Una fila por mes para cada paciente (24 meses × 21 variables), con la misma cohorte, `y` y partición. Escalado ajustado solo con train |
+| 6 | `notebooks/05_gru.ipynb` | salidas de `04_secuencias` | `predicciones_test_gru.csv` | GRU sobre la historia mensual, MLP de control sin orden temporal, prueba de meses desordenados, importancia por trimestre y comparación con el RF |
+| 7 | `notebooks/06_robustez.ipynb` | `dataset_consolidado.csv` + datos crudos + `src/preprocessing.py` | tablas en `results/` | Modelos de referencia (edad y sexo, clínico mínimo), curva de decisión, objetivos alternativos (solo eventos graves, por tipo), validación temporal 2022→2023 / 2023→2024 y checklist TRIPOD+AI |
+| 8 | `notebooks/07_boosting_ensamble.ipynb` | `dataset_consolidado.csv` + predicciones de 03 y 05 | `predicciones_test_ensambles.csv`, `metrics_boosting_ensambles.csv` | `HistGradientBoosting` (y LightGBM opcional), promedios y *stacking* de RF + boosting + GRU, bootstrap pareado, calibración y reclasificación del top 10% |
+
+Los cuadernos 03 a 07 usan **la misma partición train/test** que `02_modelos` (80/20 estratificada, `random_state=42`), así que sus resultados se comparan directamente. Cada cuaderno comprueba esa partición antes de comparar con los anteriores.
 
 ### Variables del dataset consolidado
 
@@ -190,19 +202,22 @@ La versión más reciente del preprocesamiento agrega variables, como los antece
 | `pandas` | Lectura por bloques, limpieza y agregación por paciente |
 | `numpy` | Cálculos numéricos y validación de rangos (en `float64`) |
 | `matplotlib`, `seaborn` | Gráficos del EDA, del preprocesamiento y de los modelos |
-| `scikit-learn` | `train_test_split`, `StratifiedKFold`, `Pipeline`, `SimpleImputer`, `StandardScaler`, KNN, árbol, regresión logística y métricas |
+| `scikit-learn` | `train_test_split`, `StratifiedKFold`, `Pipeline`, `SimpleImputer`, `StandardScaler`, KNN, árbol, regresión logística, Random Forest, `HistGradientBoostingClassifier` y métricas |
+| `scipy` | Pruebas estadísticas en `06_robustez` y `07_boosting_ensamble` |
+| `torch` (PyTorch) | Red recurrente GRU en `05_gru` (funciona en CPU) |
 | `jupyter` | Ejecutar los cuadernos |
+| `lightgbm` *(opcional)* | Comparación con LightGBM en `07_boosting_ensamble`; si no está, esa sección se omite |
 | `imbalanced-learn` *(opcional)* | Solo para el experimento comparativo con SMOTE/SMOTENC |
 
-Todas se instalan con un solo comando de `pip` (paso 3 de la instalación); `imbalanced-learn` solo hace falta para el experimento con SMOTE: `pip install imbalanced-learn`.
+Las obligatorias se instalan con un solo comando de `pip` (paso 3 de la instalación). Las opcionales, solo si se necesitan: `pip install lightgbm imbalanced-learn`.
 
 ### Instalación
 
 ```bash
 # 1. Clonar el repositorio y descargar los archivos grandes
 git lfs install
-git clone https://github.com/KarlaEmi/proyecto.git
-cd proyecto
+git clone https://github.com/KarlaEmi/Proyecto_IA_HTA_SIS.git
+cd Proyecto_IA_HTA_SIS
 git lfs pull
 
 # 2. Crear un entorno virtual
@@ -211,7 +226,7 @@ python -m venv .venv
 # Linux/macOS:  source .venv/bin/activate
 
 # 3. Instalar las dependencias
-pip install pandas numpy matplotlib seaborn scikit-learn jupyter
+pip install pandas numpy matplotlib seaborn scikit-learn scipy torch jupyter
 
 # 4. Descomprimir los datos crudos
 #    Los .zip quedan en data/raw/ y contienen los CSV "1. HTA_FUAS.csv", etc.
@@ -232,12 +247,18 @@ Además, descarga `ubigeo_inei_2025.csv` desde [ubigeos_peru](https://github.com
 
    El cuaderno genera `dataset_consolidado.csv`. Muévelo a `data/processed/`. Si se activa alguno de sus controles de calidad (por ejemplo, demasiadas presiones anuladas), la ejecución se detiene con un mensaje.
 3. **Modelos:** abre `notebooks/02_modelos.ipynb`. Revisa que la ruta de lectura apunte al CSV, por ejemplo `pd.read_csv('../data/processed/dataset_consolidado.csv', index_col='paciente')`. Ejecuta todas las celdas.
+4. **Random Forest:** ejecuta `notebooks/03_random_forest.ipynb`. Guarda `predicciones_test_rf_rl.csv` junto al dataset; lo usan 05 y 07.
+5. **Secuencias y GRU:** ejecuta `notebooks/04_secuencias.ipynb` (lee los CSV crudos y genera el tensor mensual, ≈850 MB) y luego `notebooks/05_gru.ipynb`. La GRU entrena con el 30% de train por defecto (`FRAC_TRAIN = 0.3`).
+6. **Robustez:** `notebooks/06_robustez.ipynb` necesita además los datos crudos y el módulo `src/preprocessing.py` (la misma lógica que `src/preprocessing.ipynb`, con ventanas de tiempo parametrizables). La primera ejecución lee los crudos y guarda las cohortes temporales; las siguientes las reutilizan.
+7. **Boosting y ensambles:** ejecuta `notebooks/07_boosting_ensamble.ipynb` al final, porque lee las predicciones de 03 y 05. Tarda unos 10-15 minutos (para una prueba rápida: `N_AJUSTE = 30_000`, `N_ITER = 5`).
 
 La semilla es `SEED = 42` en todos los cuadernos.
 
 ---
 
-## 7. Resultados del baseline
+## 7. Resultados
+
+### 7.1 Baseline (entregable parcial)
 
 Resultados del entregable parcial, sobre 84,663 pacientes de test:
 
@@ -249,11 +270,31 @@ Resultados del entregable parcial, sobre 84,663 pacientes de test:
 
 La capacidad predictiva es moderada. Es lo esperable sin datos de laboratorio, como creatinina, colesterol o HbA1c. El detalle está en `ENTREGABLE_PARCIAL.md`.
 
+### 7.2 Modelos avanzados y ensambles (cuadernos 03 a 07)
+
+Con el dataset actualizado (419,226 pacientes, 5.60% de complicaciones) y un test de 83,846 pacientes. Todos los modelos van sin pesos de clase, así que sus probabilidades están calibradas.
+
+| Modelo | ROC-AUC | PR-AUC | Brier | Captura top 10% |
+|---|---|---|---|---|
+| Regresión logística | 0.692 | 0.116 | — | — |
+| GRU (historia mensual) | 0.703 | 0.125 | 0.0512 | 26.6% |
+| Random Forest | 0.705 | 0.124 | 0.0512 | 26.3% |
+| **Gradient boosting** (mejor modelo individual) | **0.709** | **0.133** | 0.0510 | 27.1% |
+| **Promedio RF + boosting + GRU** (mejor ensamble) | **0.712** | — | ≈0.051 | — |
+
+Lo principal:
+- **El gradient boosting es el modelo final propuesto.** Supera al Random Forest (+0.004 de ROC-AUC, significativo; +7% de PR-AUC), se entrena en segundos y maneja los faltantes sin imputar.
+- **El orden temporal aporta.** La GRU supera en +0.010 a un control con las mismas variables pero sin orden. El último trimestre de 2023 es el periodo más informativo.
+- **Combinar modelos distintos rinde más que mejorar uno.** El ensamble con la GRU llega a 0.712 y, con la misma capacidad de seguimiento (top 10%), detecta un 4.7% más de complicaciones que el Random Forest.
+- **El modelo es robusto** (`06_robustez`): supera a un modelo clínico mínimo (0.649), es útil entre umbrales de riesgo de 3% y 15%, mejora con eventos graves (0.731) y pierde solo 0.011 de ROC-AUC al evaluarlo en el año siguiente.
+- **El techo de ~0.71 está en las variables, no en el algoritmo.** Siete enfoques y seis ensambles quedan entre 0.66 y 0.712.
+
+El detalle, con intervalos de confianza bootstrap, está en cada cuaderno.
+
 **Siguientes pasos:**
-- Random Forest y HistGradientBoosting.
-- PR-AUC, ajuste del umbral y calibración.
-- `log1p` en conteos y gastos, y regularización L1/elastic-net.
-- Validación temporal.
+- Variables de recencia y tendencia (últimos 3 y 6 meses), variabilidad de la presión y síntomas previos.
+- Validación temporal del gradient boosting y valores SHAP para explicar predicciones individuales.
+- Entrenar la GRU con todo train y probar la LSTM.
 
 ---
 
